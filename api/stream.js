@@ -1,31 +1,39 @@
-// api/stream.js
 import ytdl from "ytdl-core";
 
 export const config = { api: { responseLimit: false } };
 
 export default async function handler(req, res) {
-  let { url } = req.query;
+  try {
+    let { url } = req.query;
 
-  if (!url) return res.status(400).send("Missing URL");
+    if (!url) return res.status(400).send("Missing URL");
 
-  // Remove extra params like ?si=…
-  url = url.split("?")[0];
+    url = decodeURIComponent(url);
 
-  if (!ytdl.validateURL(url)) return res.status(400).send("Invalid YouTube URL");
+    // Always remove ?si= etc
+    url = url.split("?")[0];
 
-  res.setHeader("Content-Type", "audio/mpeg");
-  res.setHeader("Transfer-Encoding", "chunked");
+    if (!ytdl.validateURL(url)) {
+      return res.status(400).send("Invalid YouTube URL");
+    }
 
-  const stream = ytdl(url, {
-    filter: "audioonly",
-    quality: "highestaudio",
-    highWaterMark: 1 << 25,
-  });
+    const info = await ytdl.getInfo(url);
+    const format = ytdl.chooseFormat(info.formats, {
+      quality: "highestaudio",
+      filter: "audioonly",
+    });
 
-  stream.on("error", (err) => {
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Accept-Ranges", "bytes");
+
+    const stream = ytdl.downloadFromInfo(info, {
+      format,
+      highWaterMark: 1024 * 512, // lower size for vercel streams
+    });
+
+    stream.pipe(res);
+  } catch (err) {
     console.error(err);
-    return res.status(500).send("Stream error");
-  });
-
-  stream.pipe(res);
+    res.status(500).send("Error streaming audio");
+  }
 }
