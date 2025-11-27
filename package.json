@@ -1,0 +1,7 @@
+{
+  "name": "swify-backend",
+  "version": "1.0.0",
+  "dependencies": {
+    "youtube-sr": "^4.0.10"
+  }
+}
