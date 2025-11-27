@@ -2,6 +2,7 @@
   "name": "swify-backend",
   "version": "1.0.0",
   "dependencies": {
-    "youtube-sr": "^4.0.10"
+    "youtube-sr": "^4.0.10",
+    "ytdl-core": "^4.11.5"
   }
 }
