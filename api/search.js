@@ -6,7 +6,11 @@ export default async function handler(req, res) {
   if (!q) return res.status(400).json({ error: "Missing query parameter 'q'" });
 
   try {
-    const results = await YouTube.search(q, { limit: 50 });
+    // Refine query to prioritize music and filter for videos only
+    const results = await YouTube.search(`${q} song`, {
+      limit: 50,
+      type: "video",
+    });
 
     // minimal data to send to client
     const mapped = results.map((r) => ({
