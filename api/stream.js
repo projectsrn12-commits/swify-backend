@@ -1,46 +1,56 @@
 // api/stream.js
-import ytdl from 'ytdl-core';
+const ytdl = require('ytdl-core');
+const express = require('express');
+const cors = require('cors');
 
-export const config = {
-  api: {
-    responseLimit: false, // Disable size limit for streaming
-  },
-};
+const app = express();
+app.use(cors());
+app.use(express.json()); // To parse JSON body
 
-export default async function handler(req, res) {
-  try {
-    let { url, type } = req.query;
+// Vercel serverless function route
+app.post('/', async (req, res) => {
+    // We expect the YouTube URL/ID in the POST request body
+    const { url } = req.body; 
 
-    if (!url) {
-      return res.status(400).json({ error: 'No URL provided' });
+    if (!url || !ytdl.validateURL(url)) {
+        return res.status(400).json({ 
+            status: 'error', 
+            message: 'Invalid or missing YouTube URL/ID in request body.' 
+        });
     }
 
-    // Convert youtu.be short URL to full URL
-    if (url.includes('youtu.be')) {
-      const videoId = url.split('/').pop();
-      url = `https://www.youtube.com/watch?v=${videoId}`;
-    }
+    try {
+        // Find the best audio-only format
+        const info = await ytdl.getInfo(url);
+        
+        const audioFormat = ytdl.chooseFormat(info.formats, { 
+            quality: 'highestaudio', 
+            filter: 'audioonly' 
+        });
 
-    // Validate the URL
-    if (!ytdl.validateURL(url)) {
-      return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
+        if (!audioFormat || !audioFormat.url) {
+            return res.status(500).json({ 
+                status: 'error', 
+                message: 'Could not find a suitable audio stream format.' 
+            });
+        }
+        
+        // Return the direct, time-sensitive stream URL along with metadata
+        res.status(200).json({
+            status: 'success',
+            stream_url: audioFormat.url,
+            title: info.videoDetails.title,
+            artist: info.videoDetails.author.name,
+            thumbnail: info.videoDetails.thumbnails[0].url || null,
+        });
 
-    // Default type is audio
-    type = type || 'audio';
-
-    // Set headers and stream
-    if (type === 'audio') {
-      res.setHeader('Content-Type', 'audio/mpeg');
-      ytdl(url, { filter: 'audioonly', highWaterMark: 1 << 25 }).pipe(res);
-    } else if (type === 'video') {
-      res.setHeader('Content-Type', 'video/mp4');
-      ytdl(url, { quality: 'highest', highWaterMark: 1 << 25 }).pipe(res);
-    } else {
-      return res.status(400).json({ error: 'Invalid type. Use audio or video.' });
+    } catch (error) {
+        console.error('Stream Extraction Error:', error);
+        res.status(500).json({ 
+            status: 'error', 
+            message: `Failed to process YouTube link: ${error.message}` 
+        });
     }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to stream video/audio', details: err.message });
-  }
-}
+});
+
+module.exports = app;
